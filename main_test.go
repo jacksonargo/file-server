@@ -52,7 +52,7 @@ func TestHandleGet(t *testing.T) {
 		runTest(t, dir[len(ContentRoot):]+"/file.txt", http.StatusOK, `{
           "status": "ok",
           "type": "file",
-          "file_data": {
+          "file": {
             "name": "file.txt",
 			"path": "`+dir[len(ContentRoot):]+`/file.txt",
             "owner": "0",

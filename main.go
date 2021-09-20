@@ -17,7 +17,7 @@ type ResponseBody struct {
 	Status    string         `json:"status"`
 	Type      string         `json:"type"`
 	Error     *ErrorData     `json:"error,omitempty"`
-	File      *FileData      `json:"file_data,omitempty"`
+	File      *FileData      `json:"file,omitempty"`
 	Directory *DirectoryData `json:"directory,omitempty"`
 }
 
