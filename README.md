@@ -34,7 +34,7 @@ docker build . -t file-server
 docker run --rm \
   --publish 8080:8080 \
   --name "file-server-1" \
-  --volume "/super/important/content:/srv:ro" \
+  --volume "/super/important/content:/srv" \
   --env "FILE_SERVER_LISTEN_ADDRESS=0.0.0.0:8080" \
   --env "FILE_SERVER_CONTENT_ROOT=/srv" \
   file-server
