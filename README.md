@@ -1,32 +1,48 @@
 # file-server
 
-## Installation
+An http api for retrieving file contents and metadata from a local filesystem.
 
-Clone the repo
-```bash
-git clone https://github.com/jacksonargo/file-server.git
-```
+## System Requirements
+
+* [Docker](https://www.docker.com/products/docker-desktop) | For remote deployments or local testing.
+* [Golang](https://golang.org/dl/) | For local developemnt.
 
 ## Basic Usage
 
 ```bash
-./run.sh /some/directory/to/serve
+# Clone the repo
+git clone https://github.com/jacksonargo/file-server.git && cd file-server
+# Launch the service. By default it listens on localhost:8080.
+./run.sh /super/important/content
 ```
 
 ## Advanced Usage
 
+### Environment Variables
+
+The file-server binary supports configuration via the following environment variables:
+
+|Name|Default|Description|
+|----|-------|-----------|
+|`FILE_SERVER_LISTEN_ADDRESS`|`localhost:8080`|Http listen address.|
+|`FILE_SERVER_CONTENT_ROOT`|`.`|Path to the content directory.|
+
+For greater control over the port mappings and other options in docker deployments, you can build and launch the service using the docker client directly.
+
 ```bash
-docker build . -t "$IMAGE_NAME"
+docker build . -t file-server
 docker run --rm \
   --publish 8080:8080 \
-  --name "$CONTAINER_NAME" \
-  --volume "${CONTENT_ROOT}:/srv:ro" \
+  --name "file-server-1" \
+  --volume "/super/important/content:/srv:ro" \
   --env "FILE_SERVER_LISTEN_ADDRESS=0.0.0.0:8080" \
   --env "FILE_SERVER_CONTENT_ROOT=/srv" \
-  "$IMAGE_NAME"
+  file-server
 ```
 
-## Get File and Directory Content
+## Api Endpoints
+
+### Get File and Directory Content
 
 Files are returned with the full content.
 
@@ -57,7 +73,7 @@ GET /PATH/TO/DIRECTORY
 ```
 
 ```bash
-$ curl -s -XGET localhost:8080/hello.txt|jq .
+$ curl -s -XGET localhost:8080/|jq .
 {
   "status": "ok",
   "type": "directory",
@@ -65,14 +81,14 @@ $ curl -s -XGET localhost:8080/hello.txt|jq .
     "name": "/",
     "path": "/",
     "owner": "1000",
-    "permissions": "0777",
+    "permissions": "0700",
     "size": 512,
     "entries": [
       {
         "name": "extras",
         "path": "/extras",
         "owner": "1000",
-        "permissions": "0777",
+        "permissions": "0700",
         "size": 13,
         "type": "file"
       },
@@ -80,7 +96,7 @@ $ curl -s -XGET localhost:8080/hello.txt|jq .
         "name": "hello.txt",
         "path": "/hello.txt",
         "owner": "1000",
-        "permissions": "0777",
+        "permissions": "0600",
         "size": 6,
         "type": "file"
       }
@@ -90,7 +106,7 @@ $ curl -s -XGET localhost:8080/hello.txt|jq .
 
 ```
 
-## Objects
+## Api Objects
 
 ### `Response`
 
@@ -100,9 +116,9 @@ The generic reponse object returned by all requests.
 |-----|----|-------|
 |`status`|`string`|Ok when successful or error if an error occured.|
 |`type`|`ResponseType`|Type of data in this document.|
-|`file`|`*FileData`|The file contents and metadata. Null unless type is file.|
-|`directory`|`*DirectoryData`|The directory contents and metadata. Null unless type is directory|
-|`error`|`*ErrorData`|An error code and message.Null unless type is error.|
+|`file`|`*FileData`|(Optional) The file contents and metadata. Null unless type is file.|
+|`directory`|`*DirectoryData`|(Optional) The directory contents and metadata. Null unless type is directory.|
+|`error`|`*ErrorData`|(Optional) An error code and message.Null unless type is error.|
 
 ### `ResponseType`
 
@@ -169,6 +185,6 @@ The file type for a directory entry. Can be one of the following:
 |`"file"`|Entry is a regular file.|
 |`"directory"`|Entry is a directory.|
 |`"symlink"`|Entry is a symlink.|
-|`"unsupport"`|Entry is neither a file, directory, or symlink.|
+|`"unsupported"`|Entry is neither a file, directory, or symlink.|
 
 
