@@ -1,7 +1,7 @@
 FROM golang:1.16 as builder
 WORKDIR /go/src/app/
 ENV CGO_ENABLED=0 GOOS=linux GO111MODULE=on
-COPY go.mod go.sum main.go main_test.go ./
+COPY go.mod go.sum *.go ./
 RUN go test -v -cover ./...
 RUN go build -o file-server
 
