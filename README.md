@@ -40,15 +40,15 @@ docker run --rm \
   file-server
 ```
 
-## Api Endpoints
+## Endpoints
 
-### Get File and Directory Content
-
-Files are returned with the full content.
+### Get File Content
 
 ```
 GET /PATH/TO/FILE
 ```
+
+Returns a json response with the file contents and metadata.
 
 ```bash
 $ curl -s -XGET localhost:8080/hello.txt|jq .
@@ -66,11 +66,13 @@ $ curl -s -XGET localhost:8080/hello.txt|jq .
 }
 ```
 
-If the path is a directory, the response contains the directory metadata along with metadata for all files and directories within it.
+### Get Directory Content
 
 ```
 GET /PATH/TO/DIRECTORY
 ```
+
+Returns a json response with the directory metadata and metadata for all files and directories within it.
 
 ```bash
 $ curl -s -XGET localhost:8080/|jq .
@@ -90,7 +92,7 @@ $ curl -s -XGET localhost:8080/|jq .
         "owner": "1000",
         "permissions": "0700",
         "size": 13,
-        "type": "file"
+        "type": "directory"
       },
       {
         "name": "hello.txt",
@@ -106,9 +108,116 @@ $ curl -s -XGET localhost:8080/|jq .
 
 ```
 
-## Api Objects
+### Create a File
+
+```
+PUT /PATH/TO/FILE
+```
+
+#### JSON Request Params
+*Object*
+|Field|Type|Summary|
+|-----|----|-------|
+|`permissions`|`string`|The file octal permissions.|
+|`contents`|`string`|The file contents.|
+
+Create the file with the provided content and permissions. Any intermediate directories are created with permissions 0700. Returns a json response with the created file's contents and metadata.
+
+```bash
+$ curl -s -XPUT localhost:8080/some/new/path/hello.txt -d'{"permissions":"0600","contents":"hello\n"}'|jq .
+{
+  "status": "ok",
+  "type": "file",
+  "file_data": {
+    "name": "hello.txt",
+    "path": "/some/new/path/hello.txt",
+    "owner": "1000",
+    "permissions": "0600",
+    "size": 6,
+    "contents": "hello\n"
+  }
+}
+```
+
+### Create Many Files
+
+```
+POST /PATH/TO/DIRECTORY
+```
+
+#### JSON Request Params
+*Array of*
+|Field|Type|Summary|
+|-----|----|-------|
+|`name`|`string`|The file name.|
+|`permissions`|`string`|The file octal permissions.|
+|`contents`|`string`|The file contents.|
+
+Create all files with the provided content and permissions. Any intermediate directories are created with permissions 0700. Returns a json response with the directory contents and metadata.
+
+```bash
+$ curl -s -XPOST localhost:8080 -d'[{"name": "file.txt", "permissions": "0600", "content": "hello\n"}]'|jq .
+{
+  "status": "ok",
+  "type": "directory",
+  "directory": {
+    "name": "/",
+    "path": "/",
+    "owner": "0",
+    "permissions": "0755",
+    "size": 4096,
+    "entries": [
+      {
+        "name": "file.txt",
+        "path": "/file.txt",
+        "owner": "0",
+        "permissions": "0600",
+        "size": 6,
+        "type": "file"
+      }
+    ]
+  }
+}
+
+```
+
+
+### Deleting Files
+
+```
+DELETE /PATH/TO/FILE
+```
+
+Deletes the file.
+
+```bash
+$ curl -s -XDELETE localhost:8080/hello.txt
+{"status":"ok","type":"deleted"}
+```
+
+### Deleting Directories
+
+```
+DELETE /PATH/TO/DIRECTORY
+```
+
+#### URL Query Params
+|Field|Type|Summary|
+|-----|----|-------|
+|`recursive`|`*boolean`|(Optional) If true, delete the directory recursively.|
+
+If the path is a directory, it must be empty or provide `recursive=true` as a url param to delete recursively.
+
+```bash
+$ curl -s -XDELETE localhost:8080/scratch?recursive=true
+{"status":"ok","type":"deleted"}
+```
+
+
+## Response Data
 
 ### `Response`
+*Object*
 
 The generic reponse object returned by all requests.
 
@@ -116,21 +225,24 @@ The generic reponse object returned by all requests.
 |-----|----|-------|
 |`status`|`string`|Ok when successful or error if an error occured.|
 |`type`|`ResponseType`|Type of data in this document.|
+|`error`|`*ErrorData`|(Optional) An error code and message. Null unless type is error.|
 |`file`|`*FileData`|(Optional) The file contents and metadata. Null unless type is file.|
 |`directory`|`*DirectoryData`|(Optional) The directory contents and metadata. Null unless type is directory.|
-|`error`|`*ErrorData`|(Optional) An error code and message.Null unless type is error.|
 
 ### `ResponseType`
+*String*
 
 Used to indicate type of data in the response. Can be one of the following:
 
-| ResponseType |Summary|
+|ResponseType|Summary|
 |----|-------|
-|`"error"`|Response contains ErrorData.|
-|`"file"`|Response contains FileData.|
-|`"directory"`|Response contains DirectoryData.|
+|`"error"`|An error occured while executing the request.|
+|`"file"`|The requested file is a regular file.|
+|`"directory"`|The requested file is a directory.|
+|`"deleted"`|The requested file was deleted.|
 
 ### `ErrorData`
+*Object*
 
 Contains an error code and message. This is returned if an error occurs while handling the request.
 
@@ -140,6 +252,7 @@ Contains an error code and message. This is returned if an error occurs while ha
 |`error`|`string`|The url path to the file.|
 
 ### `FileData`
+*Object*
 
 File metadata and contents. This is returned when the request path is a file or a symlink to a file.
 
@@ -153,6 +266,7 @@ File metadata and contents. This is returned when the request path is a file or 
 |`contents`|`string`|The file contents.|
 
 ### `DirectoryData`
+*Object*
 
 Directory metadata and a list of directory entries. This is returned when the request path is a directory or a symlink to a directory.
 
@@ -166,6 +280,7 @@ Directory metadata and a list of directory entries. This is returned when the re
 |`entries`|`List of DirectoryEntry`|The directory contents.|
 
 ### `DirectoryEntry`
+*Object*
 
 |Field|Type|Summary|
 |-----|----|-------|
@@ -177,10 +292,11 @@ Directory metadata and a list of directory entries. This is returned when the re
 |`size`|`int`|The size in bytes.|
 
 ### `DirectoryEntryType`
+*String*
 
 The file type for a directory entry. Can be one of the following:
 
-| ResponseType |Summary|
+|DirectoryEntryType|Summary|
 |----|-------|
 |`"file"`|Entry is a regular file.|
 |`"directory"`|Entry is a directory.|
