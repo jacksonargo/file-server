@@ -110,7 +110,7 @@ func handlePut(contentRoot string, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := os.WriteFile(fileName, []byte(data.Content), os.FileMode(perms)); err != nil {
+	if err := os.WriteFile(fileName, []byte(data.Contents), os.FileMode(perms)); err != nil {
 		internalServerError(w, err)
 		return
 	}
@@ -161,7 +161,7 @@ func handlePost(contentRoot string, w http.ResponseWriter, r *http.Request) {
 
 		args = append(args, createFileArgs{
 			fileName,
-			[]byte(fileData.Content),
+			[]byte(fileData.Contents),
 			os.FileMode(perms),
 		})
 	}

@@ -116,10 +116,10 @@ func NewFileMeta(filePath string, fileInfo os.FileInfo) FileMeta {
 type PostFileRequest struct {
 	Name        string `json:"name"`
 	Permissions string `json:"permissions"`
-	Content     string `json:"content,omitempty"`
+	Contents    string `json:"contents,omitempty"`
 }
 
 type PutFileRequest struct {
 	Permissions string `json:"permissions"`
-	Content     string `json:"content,omitempty"`
+	Contents     string `json:"contents,omitempty"`
 }

@@ -13,234 +13,6 @@ import (
 
 const ContentRoot = "test"
 
-func TestHandleDelete(t *testing.T) {
-	runTest := func(t *testing.T, target string, wantStatus int, wantBody string) {
-		t.Helper()
-		httpRequest := httptest.NewRequest(http.MethodDelete, target, nil)
-		responseRecorder := httptest.NewRecorder()
-		httpHandler(ContentRoot).ServeHTTP(responseRecorder, httpRequest)
-		assertHttpResponse(t, responseRecorder.Result(), wantStatus, wantBody)
-	}
-
-	t.Run("file does not exist", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		runTest(t, "/file.txt", http.StatusNotFound, `{
-          "status": "error",
-          "type": "error",
-          "error": {
-            "code": 404,
-            "error": "remove test/file.txt: no such file or directory"
-          }
-        }`)
-	})
-
-	t.Run("delete file", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		mustWriteFile(t, []byte("hello\n"), "/file.txt", 0644)
-		runTest(t, "/file.txt", http.StatusOK, `{"status":"ok","type":"deleted"}`)
-		assertFileDoesNotExists(t, "/file.txt")
-	})
-
-	t.Run("delete empty directory", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		mustMkDir(t, "/new", 0700)
-		runTest(t, "/new", http.StatusOK, `{"status":"ok","type":"deleted"}`)
-		assertFileDoesNotExists(t, "/new")
-	})
-
-	t.Run("delete directory with contents", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		mustMkDir(t, "/new", 0700)
-		mustWriteFile(t, []byte("hello\n"), "/new/file.txt", 0644)
-		runTest(t, "/new", http.StatusBadRequest, `{
-          "status": "error",
-          "type": "error",
-          "error": {
-            "code": 400,
-            "error": "remove test/new: directory not empty"
-          }
-        }`)
-		assertFileExists(t, "/new")
-	})
-
-	t.Run("recursive delete directory", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		mustMkDir(t, "/new", 0700)
-		mustWriteFile(t, []byte("hello\n"), "/new/file.txt", 0644)
-		runTest(t, "/new?recursive=true", http.StatusOK, `{"status":"ok","type":"deleted"}`)
-		assertFileDoesNotExists(t, "/new")
-	})
-}
-
-func TestHandlePost(t *testing.T) {
-	runTest := func(t *testing.T, target string, reqBody string, wantStatus int, wantBody string) {
-		t.Helper()
-		httpRequest := httptest.NewRequest(http.MethodPost, target, strings.NewReader(reqBody))
-		responseRecorder := httptest.NewRecorder()
-		httpHandler(ContentRoot).ServeHTTP(responseRecorder, httpRequest)
-		assertHttpResponse(t, responseRecorder.Result(), wantStatus, wantBody)
-	}
-
-	t.Run("invalid json", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		runTest(t, "/",
-			`{]`,
-			http.StatusBadRequest,
-			`{
-			  "status": "error",
-			  "type": "error",
-			  "error": {
-				"code": 400,
-				"error": "invalid json: invalid character ']' looking for beginning of object key string"
-			  }
-        	}`)
-	})
-
-	t.Run("target is not a directory", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		mustWriteFile(t, []byte("hello\n"), "/file.txt", 0644)
-		runTest(t, "/file.txt",
-			`[{"name": "another_file.txt", "permissions": "0600", "content": "hello\n"}]`,
-			http.StatusBadRequest,
-			`{
-			  "status": "error",
-			  "type": "error",
-			  "error": {
-				"code": 400,
-				"error": "test/file.txt is not a directory"
-			  }
-        	}`)
-	})
-
-	t.Run("success", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		runTest(t, "/new/",
-			`[{"name": "file.txt", "permissions": "0600", "content": "hello\n"}]`,
-			http.StatusOK,
-			`{
-			   "status": "ok",
-			   "type": "directory",
-			   "directory": {
-				 "name": "new",
-				 "path": "/new/",
-				 "owner": "0",
-				 "permissions": "0700",
-				 "size": 4096,
-				 "entries": [
-				   {
-					 "name": "file.txt",
-					 "path": "/new/file.txt",
-					 "owner": "0",
-					 "permissions": "0600",
-					 "size": 6,
-					 "type": "file"
-				   }
-				 ]
-			   }
-			 }`)
-	})
-}
-
-func TestHandlePut(t *testing.T) {
-	runTest := func(t *testing.T, target string, reqBody string, wantStatus int, wantBody string) {
-		t.Helper()
-		httpRequest := httptest.NewRequest(http.MethodPut, target, strings.NewReader(reqBody))
-		responseRecorder := httptest.NewRecorder()
-		httpHandler(ContentRoot).ServeHTTP(responseRecorder, httpRequest)
-		assertHttpResponse(t, responseRecorder.Result(), wantStatus, wantBody)
-	}
-
-	t.Run("invalid json", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		runTest(t, "/",
-			`{]`,
-			http.StatusBadRequest,
-			`{
-			  "status": "error",
-			  "type": "error",
-			  "error": {
-				"code": 400,
-				"error": "invalid json: invalid character ']' looking for beginning of object key string"
-			  }
-        	}`)
-	})
-
-	t.Run("target is not a file", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		mustMkDir(t, "/dir", 0700)
-		runTest(t, "/dir",
-			`{"permissions": "0600", "content": "hello\n"}`,
-			http.StatusBadRequest,
-			`{
-			  "status": "error",
-			  "type": "error",
-			  "error": {
-				"code": 400,
-				"error": "test/dir is not a file"
-			  }
-        	}`)
-	})
-
-	t.Run("invalid permissions", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		runTest(t, "/new/file.txt",
-			`{"permissions": "0x600", "content": "hello\n"}`,
-			http.StatusBadRequest,
-			`{
-			  "status": "error",
-			  "type": "error",
-			  "error": {
-				"code": 400,
-				"error": "test/new/file.txt has invalid octal permissions"
-			  }
-        	}`)
-	})
-
-	t.Run("success", func(t *testing.T) {
-		mustMakeContentRoot(t)
-		defer mustDeleteContentRoot(t)
-
-		runTest(t, "/new/file.txt",
-			`{"permissions": "0600", "content": "hello\n"}`,
-			http.StatusOK,
-			`{
-			  "status": "ok",
-			  "type": "file",
-			  "file": {
-				"name": "file.txt",
-				"path": "/new/file.txt",
-				"owner": "0",
-				"permissions": "0600",
-				"size": 6,
-				"contents": "hello\n"
-			  }
-        	}`)
-		assertFileContents(t, "/new/file.txt", 0600, "hello\n")
-	})
-}
-
 func TestHandleGet(t *testing.T) {
 	runTest := func(t *testing.T, target string, wantStatus int, wantBody string) {
 		t.Helper()
@@ -356,6 +128,235 @@ func TestHandleGet(t *testing.T) {
 			]
           }
         }`)
+	})
+}
+
+func TestHandlePut(t *testing.T) {
+	runTest := func(t *testing.T, target string, reqBody string, wantStatus int, wantBody string) {
+		t.Helper()
+		httpRequest := httptest.NewRequest(http.MethodPut, target, strings.NewReader(reqBody))
+		responseRecorder := httptest.NewRecorder()
+		httpHandler(ContentRoot).ServeHTTP(responseRecorder, httpRequest)
+		assertHttpResponse(t, responseRecorder.Result(), wantStatus, wantBody)
+	}
+
+	t.Run("invalid json", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		runTest(t, "/",
+			`{]`,
+			http.StatusBadRequest,
+			`{
+			  "status": "error",
+			  "type": "error",
+			  "error": {
+				"code": 400,
+				"error": "invalid json: invalid character ']' looking for beginning of object key string"
+			  }
+        	}`)
+	})
+
+	t.Run("target is not a file", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		mustMkDir(t, "/dir", 0700)
+		runTest(t, "/dir",
+			`{"permissions": "0600", "contents": "hello\n"}`,
+			http.StatusBadRequest,
+			`{
+			  "status": "error",
+			  "type": "error",
+			  "error": {
+				"code": 400,
+				"error": "test/dir is not a file"
+			  }
+        	}`)
+	})
+
+	t.Run("invalid permissions", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		runTest(t, "/new/file.txt",
+			`{"permissions": "0x600", "contents": "hello\n"}`,
+			http.StatusBadRequest,
+			`{
+			  "status": "error",
+			  "type": "error",
+			  "error": {
+				"code": 400,
+				"error": "test/new/file.txt has invalid octal permissions"
+			  }
+        	}`)
+	})
+
+	t.Run("success", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		runTest(t, "/new/file.txt",
+			`{"permissions": "0600", "contents": "hello\n"}`,
+			http.StatusOK,
+			`{
+			  "status": "ok",
+			  "type": "file",
+			  "file": {
+				"name": "file.txt",
+				"path": "/new/file.txt",
+				"owner": "0",
+				"permissions": "0600",
+				"size": 6,
+				"contents": "hello\n"
+			  }
+        	}`)
+		assertFileContents(t, "/new/file.txt", 0600, "hello\n")
+	})
+}
+
+func TestHandlePost(t *testing.T) {
+	runTest := func(t *testing.T, target string, reqBody string, wantStatus int, wantBody string) {
+		t.Helper()
+		httpRequest := httptest.NewRequest(http.MethodPost, target, strings.NewReader(reqBody))
+		responseRecorder := httptest.NewRecorder()
+		httpHandler(ContentRoot).ServeHTTP(responseRecorder, httpRequest)
+		assertHttpResponse(t, responseRecorder.Result(), wantStatus, wantBody)
+	}
+
+	t.Run("invalid json", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		runTest(t, "/",
+			`{]`,
+			http.StatusBadRequest,
+			`{
+			  "status": "error",
+			  "type": "error",
+			  "error": {
+				"code": 400,
+				"error": "invalid json: invalid character ']' looking for beginning of object key string"
+			  }
+        	}`)
+	})
+
+	t.Run("target is not a directory", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		mustWriteFile(t, []byte("hello\n"), "/file.txt", 0644)
+		runTest(t, "/file.txt",
+			`[{"name": "another_file.txt", "permissions": "0600", "contents": "hello\n"}]`,
+			http.StatusBadRequest,
+			`{
+			  "status": "error",
+			  "type": "error",
+			  "error": {
+				"code": 400,
+				"error": "test/file.txt is not a directory"
+			  }
+        	}`)
+	})
+
+	t.Run("success", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		runTest(t, "/new/",
+			`[{"name": "file.txt", "permissions": "0600", "contents": "hello\n"}]`,
+			http.StatusOK,
+			`{
+			   "status": "ok",
+			   "type": "directory",
+			   "directory": {
+				 "name": "new",
+				 "path": "/new/",
+				 "owner": "0",
+				 "permissions": "0700",
+				 "size": 4096,
+				 "entries": [
+				   {
+					 "name": "file.txt",
+					 "path": "/new/file.txt",
+					 "owner": "0",
+					 "permissions": "0600",
+					 "size": 6,
+					 "type": "file"
+				   }
+				 ]
+			   }
+			 }`)
+		assertFileContents(t, "/new/file.txt", 0600, "hello\n")
+	})
+}
+
+func TestHandleDelete(t *testing.T) {
+	runTest := func(t *testing.T, target string, wantStatus int, wantBody string) {
+		t.Helper()
+		httpRequest := httptest.NewRequest(http.MethodDelete, target, nil)
+		responseRecorder := httptest.NewRecorder()
+		httpHandler(ContentRoot).ServeHTTP(responseRecorder, httpRequest)
+		assertHttpResponse(t, responseRecorder.Result(), wantStatus, wantBody)
+	}
+
+	t.Run("file does not exist", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		runTest(t, "/file.txt", http.StatusNotFound, `{
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 404,
+            "error": "remove test/file.txt: no such file or directory"
+          }
+        }`)
+	})
+
+	t.Run("delete file", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		mustWriteFile(t, []byte("hello\n"), "/file.txt", 0644)
+		runTest(t, "/file.txt", http.StatusOK, `{"status":"ok","type":"deleted"}`)
+		assertFileDoesNotExists(t, "/file.txt")
+	})
+
+	t.Run("delete empty directory", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		mustMkDir(t, "/new", 0700)
+		runTest(t, "/new", http.StatusOK, `{"status":"ok","type":"deleted"}`)
+		assertFileDoesNotExists(t, "/new")
+	})
+
+	t.Run("delete directory with contents", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		mustMkDir(t, "/new", 0700)
+		mustWriteFile(t, []byte("hello\n"), "/new/file.txt", 0644)
+		runTest(t, "/new", http.StatusBadRequest, `{
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 400,
+            "error": "remove test/new: directory not empty"
+          }
+        }`)
+		assertFileExists(t, "/new")
+	})
+
+	t.Run("recursive delete directory", func(t *testing.T) {
+		mustMakeContentRoot(t)
+		defer mustDeleteContentRoot(t)
+
+		mustMkDir(t, "/new", 0700)
+		mustWriteFile(t, []byte("hello\n"), "/new/file.txt", 0644)
+		runTest(t, "/new?recursive=true", http.StatusOK, `{"status":"ok","type":"deleted"}`)
+		assertFileDoesNotExists(t, "/new")
 	})
 }
 
